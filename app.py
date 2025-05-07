@@ -36,8 +36,21 @@ st.set_page_config(
     page_title="Supervity | Vendor Research Agent",
     page_icon="favicon.png",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    theme="light"
 )
+
+# Force light theme with custom CSS
+st.markdown("""
+<style>
+    [data-testid="stSidebar"] > div:first-child {
+        background-color: #ffffff;
+    }
+    .stApp {
+        background-color: #ffffff;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Inject custom CSS
 st.markdown(get_css(), unsafe_allow_html=True)
@@ -227,11 +240,14 @@ def run_async(func, *args, **kwargs):
     async def run_and_capture():
         r = await func(*args, **kwargs)
         result.append(r)
-        
+    
+    # Always create a new event loop to avoid coroutine reuse issues
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_and_capture())
-    loop.close()
+    try:
+        loop.run_until_complete(run_and_capture())
+    finally:
+        loop.close()
     
     if result:
         return result[0]

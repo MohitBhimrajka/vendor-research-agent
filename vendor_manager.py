@@ -99,15 +99,22 @@ class VendorManager:
                 remaining = batch_count - len(new_vendors)
                 logger.info(f"Need {remaining} more vendors for batch (duplicates filtered)")
                 
-                # Try again with a different search approach
-                retry_vendors = await self.llm_service.find_vendor_names(
-                    f"{term} alternative", remaining, business_type, country, region
-                )
+                # Use a different search term for retry to avoid duplicates
+                retry_term = f"{term} alternative"
                 
-                # Filter and add
-                retry_new = [v for v in retry_vendors if v not in self.discovered_vendors]
-                self.discovered_vendors.update(retry_new)
-                all_vendors.extend(retry_new)
+                # Try again with a different search approach - using a new async call
+                try:
+                    retry_vendors = await self.llm_service.find_vendor_names(
+                        retry_term, remaining, business_type, country, region
+                    )
+                    
+                    # Filter and add
+                    retry_new = [v for v in retry_vendors if v not in self.discovered_vendors]
+                    self.discovered_vendors.update(retry_new)
+                    all_vendors.extend(retry_new)
+                except Exception as e:
+                    logger.error(f"Error during retry vendor search: {e}")
+                    # Continue with what we have rather than failing completely
         
         # Return the vendors found
         return all_vendors

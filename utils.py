@@ -1,6 +1,7 @@
 import functools
 import logging
 import time
+import asyncio
 from typing import Callable, Dict, List, Any, TypeVar, Tuple
 
 # Set up logging
@@ -83,25 +84,32 @@ def retry_with_backoff(max_retries: int = 3, initial_backoff: float = 1.0):
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs):
             backoff = initial_backoff
+            last_exception = None
+            
             for attempt in range(max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
                 except Exception as e:
+                    last_exception = e
                     if attempt == max_retries:
                         logger.error(f"Failed after {max_retries} retries: {e}")
                         raise
                     
                     logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {backoff:.2f}s")
-                    time.sleep(backoff)
+                    # Use asyncio.sleep for async functions
+                    await asyncio.sleep(backoff)
                     backoff *= 2  # Exponential backoff
                     
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
             backoff = initial_backoff
+            last_exception = None
+            
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
+                    last_exception = e
                     if attempt == max_retries:
                         logger.error(f"Failed after {max_retries} retries: {e}")
                         raise
@@ -230,7 +238,4 @@ def get_skeleton_card_html() -> str:
             <div class="skeleton-loader" style="width: 25%;"></div>
         </div>
     </div>
-    """
-
-# Import asyncio at the top to avoid circular import issues
-import asyncio 
+    """ 
