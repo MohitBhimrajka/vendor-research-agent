@@ -5,10 +5,11 @@ import time
 import os
 from dotenv import load_dotenv
 import base64
+import logging
 
 from llm_service import LLMService
 from vendor_manager import VendorManager, VendorDetail
-from utils import get_css, get_skeleton_card_html
+from utils import get_css, get_skeleton_card_html, logger
 
 # Load environment variables
 load_dotenv()
@@ -259,22 +260,46 @@ def update_mix(manufacturer_pct, distributor_pct, retailer_pct):
 def run_async(func, *args, **kwargs):
     """Run an async function from Streamlit's synchronous environment."""
     result = []
+    error = []
     
     async def run_and_capture():
-        r = await func(*args, **kwargs)
-        result.append(r)
+        try:
+            r = await func(*args, **kwargs)
+            result.append(r)
+        except Exception as e:
+            error.append(e)
+            logger.error(f"Error in async operation: {e}")
+            # If we can't get proper results, return a simple value based on function name
+            if func.__name__ == "find_vendors":
+                # Return empty list for vendor finding
+                result.append([])
+            elif func.__name__ == "disambiguate_term":
+                # Return a simple interpretation
+                term = args[0] if args else "unknown"
+                result.append([{"interpretation": term, "description": f"Vendors related to {term}"}])
+            elif func.__name__ == "research_vendors_batch":
+                # Return empty list for research
+                result.append([])
     
     # Always create a new event loop to avoid coroutine reuse issues
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(run_and_capture())
+    except Exception as e:
+        logger.error(f"Error in event loop: {e}")
+        if not error:
+            error.append(e)
     finally:
         loop.close()
+    
+    if error:
+        st.error(f"An error occurred: {error[0]}")
     
     if result:
         return result[0]
     
+    # Default fallback
     return None
 
 # Main app flow
@@ -414,13 +439,59 @@ elif st.session_state.step == 3:
             with st.spinner(f"Searching for {count} vendors..."):
                 # Display skeleton loaders while waiting
                 st.markdown(f"Finding {count} vendors matching your criteria...")
-                for _ in range(min(5, count)):
-                    st.markdown(get_skeleton_card_html(), unsafe_allow_html=True)
                 
-                # Find vendor names
-                vendor_names = run_async(vendor_manager.find_vendors, term, count, mix, country, region)
-                st.session_state.vendors = [(name, next((k for k, v in mix.items() if v > 0), "general")) 
-                                          for name in vendor_names]
+                # Show a more informative progress display
+                progress_container = st.empty()
+                progress_bar = st.progress(0)
+                skeleton_containers = []
+                
+                # Display skeleton loaders
+                for i in range(min(5, count)):
+                    skeleton_containers.append(st.empty())
+                    skeleton_containers[i].markdown(get_skeleton_card_html(), unsafe_allow_html=True)
+                
+                # Update progress periodically
+                progress_thread_active = [True]  # Use a list so it can be modified from thread
+                
+                def update_progress_periodically():
+                    progress = 0
+                    step = 0.02
+                    while progress_thread_active[0] and progress < 0.95:
+                        progress += step
+                        progress_bar.progress(progress)
+                        progress_container.markdown(f"Searching vendors... {int(progress * 100)}% complete")
+                        time.sleep(0.5)
+                
+                import threading
+                progress_thread = threading.Thread(target=update_progress_periodically)
+                progress_thread.start()
+                
+                try:
+                    # Find vendor names
+                    vendor_names = run_async(vendor_manager.find_vendors, term, count, mix, country, region)
+                    
+                    # Format as tuples with business type
+                    if vendor_names:
+                        st.session_state.vendors = [(name, next((k for k, v in mix.items() if v > 0), "general")) 
+                                                  for name in vendor_names]
+                    else:
+                        st.error("No vendors found. Please try a different search term or configuration.")
+                        st.session_state.vendors = []
+                finally:
+                    # Clean up the progress display
+                    progress_thread_active[0] = False
+                    progress_thread.join(timeout=1.0)
+                    progress_bar.progress(1.0)
+                    
+                    if 'vendor_names' in locals() and vendor_names:
+                        progress_container.markdown(f"Found {len(vendor_names)} vendors!")
+                    else:
+                        progress_container.markdown("Search complete!")
+                    
+                    # Clear skeleton loaders
+                    for container in skeleton_containers:
+                        container.empty()
+                
                 st.rerun()
         
         elif not st.session_state.enriched_vendors:
@@ -430,30 +501,84 @@ elif st.session_state.step == 3:
             region = st.session_state.region
             vendor_count = len(st.session_state.vendors)
             
-            # Progress bar
+            # Progress bar and status
+            progress_container = st.empty()
             progress_bar = st.progress(0)
-            st.markdown(f"Researching information for {vendor_count} vendors...")
+            progress_container.markdown(f"Researching information for {vendor_count} vendors...")
             
             # Display skeleton loaders while waiting
-            for _ in range(min(5, len(st.session_state.vendors))):
-                st.markdown(get_skeleton_card_html(), unsafe_allow_html=True)
+            skeleton_containers = []
+            for i in range(min(5, vendor_count)):
+                skeleton_containers.append(st.empty())
+                skeleton_containers[i].markdown(get_skeleton_card_html(), unsafe_allow_html=True)
             
-            # Update progress callback
+            # Stats container
+            stats_container = st.empty()
+            
+            # Create a class to track progress state
+            class ProgressTracker:
+                def __init__(self):
+                    self.start_time = time.time()
+                    self.completed_vendors = 0
+            
+            # Initialize progress tracker
+            progress_tracker = ProgressTracker()
+            
+            # Update progress callback with timing statistics
             def update_enrichment_progress(current, total):
+                # Calculate progress
                 progress = current / total
                 progress_bar.progress(progress)
+                
+                # Track newly completed vendors
+                new_completions = current - progress_tracker.completed_vendors
+                progress_tracker.completed_vendors = current
+                
+                # Calculate timing stats
+                elapsed = time.time() - progress_tracker.start_time
+                vendors_per_minute = (current / elapsed) * 60 if elapsed > 0 else 0
+                estimated_total = (elapsed / current) * total if current > 0 else 0
+                estimated_remaining = estimated_total - elapsed if current > 0 else 0
+                
+                # Update status
+                progress_container.markdown(f"Researched {current} of {total} vendors ({int(progress*100)}%)")
+                
+                # Show stats if we have processed at least 5 vendors
+                if current >= 5:
+                    stats_container.markdown(f"""
+                    **Processing Stats:**
+                    - Speed: {vendors_per_minute:.1f} vendors/minute
+                    - Elapsed time: {elapsed:.1f} seconds
+                    - Estimated time remaining: {estimated_remaining:.1f} seconds
+                    """)
             
-            # Research vendors
-            enriched_vendors = run_async(
-                vendor_manager.research_vendors_batch,
-                st.session_state.vendors,
-                term,
-                country,
-                region,
-                with_progress_callback=update_enrichment_progress
-            )
+            try:
+                # Research vendors
+                enriched_vendors = run_async(
+                    vendor_manager.research_vendors_batch,
+                    st.session_state.vendors,
+                    term,
+                    country,
+                    region,
+                    with_progress_callback=update_enrichment_progress
+                )
+                
+                if enriched_vendors:
+                    st.session_state.enriched_vendors = enriched_vendors
+                else:
+                    st.error("Unable to research vendor details. Please try again.")
+            finally:
+                # Clean up display
+                progress_bar.progress(1.0)
+                progress_container.markdown(f"Research complete for {vendor_count} vendors!")
+                
+                # Clear skeleton loaders
+                for container in skeleton_containers:
+                    container.empty()
+                
+                # Clear stats
+                stats_container.empty()
             
-            st.session_state.enriched_vendors = enriched_vendors
             st.session_state.loading = False
             st.rerun()
     

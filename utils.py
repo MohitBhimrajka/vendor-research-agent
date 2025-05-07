@@ -21,13 +21,24 @@ def memoize(func: Callable) -> Callable:
     cache = {}
     
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    async def async_wrapper(*args, **kwargs):
+        key = str(args) + str(sorted(kwargs.items()))
+        if key not in cache:
+            # For async functions, we need to await the result
+            cache[key] = await func(*args, **kwargs)
+        return cache[key]
+    
+    @functools.wraps(func)
+    def sync_wrapper(*args, **kwargs):
         key = str(args) + str(sorted(kwargs.items()))
         if key not in cache:
             cache[key] = func(*args, **kwargs)
         return cache[key]
     
-    return wrapper
+    # Determine if the decorated function is async or sync
+    if asyncio.iscoroutinefunction(func):
+        return async_wrapper
+    return sync_wrapper
 
 # Batching helpers
 def create_vendor_batches(count: int, mix: Dict[str, int]) -> List[Tuple[str, int]]:

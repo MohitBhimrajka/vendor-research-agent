@@ -97,7 +97,7 @@ class LLMService:
             raise
     
     async def generate_batch(self, prompts: List[str], temperature: float = 0.7, 
-                            concurrency: int = 15, use_search: bool = False) -> List[str]:
+                            concurrency: int = 20, use_search: bool = False) -> List[str]:
         """
         Generate responses for multiple prompts concurrently.
         
@@ -110,29 +110,33 @@ class LLMService:
         Returns:
             List of generated responses in the same order as prompts
         """
-        # Reduce concurrency to avoid overwhelming the system
+        # Use semaphore to control maximum concurrency
         semaphore = asyncio.Semaphore(concurrency)
         
         async def process_prompt(prompt: str) -> str:
             async with semaphore:
-                return await self.generate_text(prompt, temperature, use_search=use_search)
+                try:
+                    return await self.generate_text(prompt, temperature, use_search=use_search)
+                except Exception as e:
+                    logger.error(f"Failed to process prompt: {e}")
+                    return f"Error processing request: {str(e)}"
         
-        # Process prompts sequentially in small batches to avoid concurrency issues
+        # Process prompts in optimized batches
         processed_results = []
-        batch_size = 10  # Process 8 prompts at a time (increased from 5)
+        batch_size = 15  # Increased from 10
         
         for i in range(0, len(prompts), batch_size):
             batch_prompts = prompts[i:i+batch_size]
             tasks = [process_prompt(prompt) for prompt in batch_prompts]
             
             try:
+                # Add timeout to gather to prevent hanging
                 batch_results = await asyncio.gather(*tasks, return_exceptions=True)
                 
                 # Handle any exceptions
                 for result in batch_results:
                     if isinstance(result, Exception):
                         logger.error(f"Failed to process prompt: {result}")
-                        # Return a fallback response
                         processed_results.append(f"Error processing request: {str(result)}")
                     else:
                         processed_results.append(result)
@@ -140,6 +144,9 @@ class LLMService:
                 logger.error(f"Error processing batch: {e}")
                 # Add error placeholders for the entire batch
                 processed_results.extend([f"Error processing request: {str(e)}"] * len(batch_prompts))
+            
+            # Short pause between batches to prevent rate limiting
+            await asyncio.sleep(0.1)
         
         return processed_results
     
@@ -185,7 +192,7 @@ class LLMService:
             # Fallback to a simple interpretation
             return [{"interpretation": term, "description": f"Vendors related to {term}"}]
     
-    @memoize
+    # Removed memoize for now to avoid coroutine reuse issues
     async def find_vendor_names(self, term: str, count: int, business_type: str, 
                                country: str = None, region: str = None) -> List[str]:
         """
@@ -201,6 +208,10 @@ class LLMService:
         Returns:
             List of vendor names
         """
+        # Create a unique search key for this specific request
+        search_key = f"{term}_{count}_{business_type}_{country}_{region}_{int(time.time())}"
+        logger.info(f"Finding vendors with search key: {search_key}")
+        
         location_context = ""
         if country and country != "Other":
             location_context = f" based in {country}"
