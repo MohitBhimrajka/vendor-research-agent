@@ -36,8 +36,7 @@ st.set_page_config(
     page_title="Supervity | Vendor Research Agent",
     page_icon="favicon.png",
     layout="wide",
-    initial_sidebar_state="expanded",
-    theme="light"
+    initial_sidebar_state="expanded"
 )
 
 # Force light theme with custom CSS
@@ -48,6 +47,30 @@ st.markdown("""
     }
     .stApp {
         background-color: #ffffff;
+    }
+    html, body, [class*="css"] {
+        color: rgb(49, 51, 63);
+        background-color: #ffffff;
+    }
+    .stMarkdown, .stTextInput > div > div > input {
+        color: rgb(49, 51, 63);
+    }
+    button[kind="primary"] {
+        background-color: rgb(255, 75, 75);
+        color: rgb(255, 255, 255);
+    }
+    button[data-testid="baseButton-secondary"] {
+        background-color: white;
+        color: rgb(49, 51, 63);
+    }
+    span[data-baseweb="tag"] {
+        background-color: rgba(255, 75, 75, 0.2);
+    }
+    div[role="radiogroup"] label {
+        color: rgb(49, 51, 63);
+    }
+    div[data-testid="stExpander"] {
+        border: 1px solid #f0f0f0;
     }
 </style>
 """, unsafe_allow_html=True)
