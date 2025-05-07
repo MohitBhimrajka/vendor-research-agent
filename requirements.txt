@@ -1,0 +1,6 @@
+streamlit==1.33.0
+google-genai==0.7.2
+python-dotenv==1.0.0
+asyncio==3.4.3
+aiohttp==3.9.1
+tqdm==4.66.1 

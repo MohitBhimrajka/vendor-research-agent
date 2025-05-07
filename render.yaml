@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: vendor-research-agent
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+    autoDeploy: true 
