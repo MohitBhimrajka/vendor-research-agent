@@ -34,7 +34,7 @@ def get_sidebar_visibility_css(show_sidebar):
 # Page configuration
 st.set_page_config(
     page_title="Supervity | Vendor Research Agent",
-    page_icon="logo.png",
+    page_icon="favicon.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -247,7 +247,7 @@ if st.session_state.step == 1:
                         value=st.session_state.term,
                         placeholder="e.g., solar panels, IT consulting, 3D printing")
     
-    if st.button("Find Vendors"):
+    if st.button("Find Vendors", key="find_vendors_btn"):
         if term:
             with st.spinner("Analyzing your search..."):
                 st.session_state.term = term
@@ -261,7 +261,7 @@ if st.session_state.step == 1:
                 with cols[i]:
                     st.markdown(f"### {interp['interpretation']}")
                     st.markdown(interp['description'])
-                    if st.button("Select", key=f"interp_{i}", on_click=select_interpretation, args=(i,)):
+                    if st.button("Select", key=f"select_interp_{i}", on_click=select_interpretation, args=(i,)):
                         pass  # The on_click function will handle the action
         else:
             st.error("Please enter a search term")
@@ -275,7 +275,7 @@ if st.session_state.step == 1:
             with cols[i]:
                 st.markdown(f"### {interp['interpretation']}")
                 st.markdown(interp['description'])
-                if st.button("Select", key=f"interp_{i}", on_click=select_interpretation, args=(i,)):
+                if st.button("Select", key=f"select_interp_session_{i}", on_click=select_interpretation, args=(i,)):
                     pass  # The on_click function will handle the action
 
 elif st.session_state.step == 2:
@@ -309,7 +309,7 @@ elif st.session_state.step == 2:
     st.session_state.region = region
     
     # Advanced Options in an expander
-    st.button("Advanced Options", on_click=toggle_advanced)
+    st.button("Advanced Options", key="toggle_advanced_btn", on_click=toggle_advanced)
     
     if st.session_state.show_advanced:
         with st.expander("Business Type Mix", expanded=True):
@@ -341,11 +341,11 @@ elif st.session_state.step == 2:
     # Buttons for navigation
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("← Back", key="back_to_disambiguation"):
+        if st.button("← Back", key="back_to_disambiguation_btn"):
             go_to_step(1)
     
     with col2:
-        if st.button("Find Vendors →", on_click=start_vendor_search):
+        if st.button("Find Vendors →", key="start_search_btn", on_click=start_vendor_search):
             pass  # The on_click function will handle the action
 
 elif st.session_state.step == 3:
@@ -353,7 +353,7 @@ elif st.session_state.step == 3:
     st.header("Step 3: Found Vendors")
     
     # Add a back button at the top for better navigation
-    if st.button("← Start New Search"):
+    if st.button("← Start New Search", key="main_new_search"):
         st.session_state.clear()
         st.rerun()
     
@@ -470,7 +470,7 @@ elif st.session_state.step == 3:
             )
             
             # Export options
-            if st.sidebar.button("Export Results (CSV)"):
+            if st.sidebar.button("Export Results (CSV)", key="export_csv_btn"):
                 # Create CSV content
                 import csv
                 import io
@@ -518,7 +518,7 @@ elif st.session_state.step == 3:
                     mime="text/csv"
                 )
             
-            if st.sidebar.button("← Start New Search"):
+            if st.sidebar.button("← Start New Search", key="sidebar_new_search"):
                 st.session_state.clear()
                 st.rerun()
                 
