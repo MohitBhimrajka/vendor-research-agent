@@ -588,12 +588,35 @@ elif st.session_state.step == 3:
         
         # Sidebar filters
         if show_sidebar:
-            min_score, max_score = st.sidebar.slider(
-                "Relevance Score", 
-                min_value=1, 
-                max_value=10,
-                value=(1, 10)
-            )
+            # Replace relevance score slider with checkboxes
+            st.sidebar.markdown("### Relevance Score")
+            
+            # Create checkbox options for all possible relevance scores
+            all_scores = list(range(1, 11))  # Scores from 1 to 10
+            
+            # Default to all scores selected
+            default_selected_scores = all_scores.copy()
+            
+            # Create a multiselect for relevance scores
+            # Using st.sidebar.multiselect would be simple but doesn't look like checkboxes
+            # Let's use actual checkboxes in a cleaner UI
+            
+            # Create 2 columns to display checkboxes in 2 rows of 5
+            col1, col2 = st.sidebar.columns(2)
+            
+            selected_scores = []
+            
+            # First row: scores 1-5
+            with col1:
+                for score in range(1, 6):
+                    if st.checkbox(f"{score}", value=True, key=f"score_{score}"):
+                        selected_scores.append(score)
+            
+            # Second row: scores 6-10
+            with col2:
+                for score in range(6, 11):
+                    if st.checkbox(f"{score}", value=True, key=f"score_{score}"):
+                        selected_scores.append(score)
             
             # Get simplified business types (standardize to main categories)
             def simplify_business_type(business_type):
@@ -613,11 +636,15 @@ elif st.session_state.step == 3:
             # Get unique simplified business types
             simplified_types = sorted(list(set(v.simplified_type for v in vendors)))
             
-            selected_types = st.sidebar.multiselect(
-                "Business Types",
-                options=simplified_types,
-                default=simplified_types
-            )
+            # Replace multiselect with checkboxes for business types
+            st.sidebar.markdown("### Business Types")
+            
+            selected_types = []
+            
+            # Create checkboxes for each business type
+            for business_type in simplified_types:
+                if st.sidebar.checkbox(business_type, value=True, key=f"type_{business_type}"):
+                    selected_types.append(business_type)
             
             # Sorting options
             sort_options = {
@@ -652,8 +679,7 @@ elif st.session_state.step == 3:
                 # Filter vendors first
                 filtered_vendors = [
                     v for v in vendors
-                    if v.relevance_score >= min_score
-                    and v.relevance_score <= max_score
+                    if v.relevance_score in selected_scores
                     and v.simplified_type in selected_types
                 ]
                 
@@ -689,8 +715,7 @@ elif st.session_state.step == 3:
             # Filter vendors
             filtered_vendors = [
                 v for v in vendors
-                if v.relevance_score >= min_score
-                and v.relevance_score <= max_score
+                if v.relevance_score in selected_scores
                 and v.simplified_type in selected_types
             ]
             
